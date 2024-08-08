@@ -13,9 +13,9 @@ use {
 ///
 /// Number of microseconds replaying a block should take, 400 millisecond block times
 /// is currently publicly communicated on solana.com
-pub const MAX_BLOCK_REPLAY_TIME_US: u64 = 400_000;
+pub const MAX_BLOCK_REPLAY_TIME_US: u64 = 1_000_000; //increased block time
 /// number of concurrent processes,
-pub const MAX_CONCURRENCY: u64 = 4;
+pub const MAX_CONCURRENCY: u64 = 32; //increased max number of useable threads
 
 // Cluster data, method of collecting at https://github.com/solana-labs/solana/issues/19627
 // Dashboard: https://metrics.solana.com/d/monitor-edge/cluster-telemetry?orgId=1
@@ -65,7 +65,7 @@ pub const MAX_BLOCK_UNITS: u64 =
     MAX_BLOCK_REPLAY_TIME_US * COMPUTE_UNIT_TO_US_RATIO * MAX_CONCURRENCY;
 
 #[cfg(test)]
-static_assertions::const_assert_eq!(MAX_BLOCK_UNITS, 48_000_000);
+static_assertions::const_assert_eq!(MAX_BLOCK_UNITS, 960_000_000);
 
 /// Number of compute units that a writable account in a block is allowed. The
 /// limit is to prevent too many transactions write to same account, therefore
