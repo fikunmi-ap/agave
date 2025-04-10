@@ -1,0 +1,45 @@
+[package]
+name = "solana-banking-bench-historical"
+publish = false
+version = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+agave-banking-stage-ingress-types = { workspace = true }
+assert_matches = { workspace = true }
+bzip2.workspace = true
+clap = { version = "3.1.8", features = ["derive", "cargo"] }
+crossbeam-channel = { workspace = true }
+indicatif.workspace = true
+log = { workspace = true }
+rand = { workspace = true }
+rayon = { workspace = true }
+reqwest.workspace = true
+solana-client = { workspace = true }
+solana-core = { workspace = true, features = ["dev-context-only-utils"] }
+solana-gossip = { workspace = true }
+solana-ledger = { workspace = true }
+solana-logger = { workspace = true }
+solana-measure = { workspace = true }
+solana-perf = { workspace = true }
+solana-poh = { workspace = true, features = ["dev-context-only-utils"] }
+solana-runtime = { workspace = true, features = ["dev-context-only-utils"] }
+solana-sdk = { workspace = true }
+solana-streamer = { workspace = true }
+solana-tpu-client = { workspace = true }
+solana-version = { workspace = true }
+tar.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+zstd.workspace = true
+
+[features]
+dev-context-only-utils = []
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
