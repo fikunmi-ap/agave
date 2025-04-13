@@ -1,5 +1,92 @@
 //! Provides utilities to download, decompress and unpack a snapshot.
 
+use {
+    decompress::decompress_and_unpack_snapshot,
+    download::download_snapshot,
+    solana_client::nonblocking::rpc_client::RpcClient,
+    std::path::{Path, PathBuf},
+    thiserror,
+};
+
+#[derive(thiserror::Error, Debug)]
+pub enum SnapshotError {
+    #[error(transparent)]
+    Download(#[from] download::DownloadError),
+
+    #[error(transparent)]
+    Decompress(#[from] decompress::DecompressionError),
+
+    #[error("Invalid save dir for snapshot")]
+    SnapshotDirError,
+
+    #[error(transparent)]
+    SolanaClient(#[from] solana_client::client_error::ClientError),
+}
+
+/// Processes a snapshot and returns the path to the
+/// processed snapshot.
+///
+/// That includes downloading, decompressing and unpacking
+/// the snapshot. It:
+/// - Checks if there is a snapshot in `save_dir`.
+/// - If there isn't, it downloads and unpacks the latest
+/// available snapshot from the RPC URL.
+///
+/// Requires memory that is > 2x of the snapshot size as it
+/// uses temporary files during processing.
+///
+/// NOTE: If you want to use an exisiting snapshot, the
+/// `save_dir` path must contain a valid snapshot file, with
+/// "snapshot" and the slot when the snapshot was made in
+/// the file name, if it doesn't the process will ignore it
+/// and download another snapshot.
+pub async fn process_snapshot(
+    rpc_client: &RpcClient,
+    reqwest_client: &reqwest::Client,
+    rpc_url: &str,
+    save_dir: &Path,
+) -> Result<PathBuf, SnapshotError> {
+    if !save_dir.is_dir() {
+        return Err(SnapshotError::SnapshotDirError);
+    }
+
+    if let Some(snapshot_path) = get_snapshot_from_cache(save_dir) {
+        return Ok(snapshot_path);
+    }
+
+    let snapshot_slot_info = rpc_client.get_highest_snapshot_slot().await?;
+
+    let compressed_snapshot = download_snapshot(reqwest_client, rpc_url, save_dir).await?;
+
+    let full_snapshot_slot = snapshot_slot_info.full;
+    let snapshot_save_path = save_dir.join(format!("snapshot_{}", full_snapshot_slot));
+
+    let decompressed_snapshot =
+        decompress_and_unpack_snapshot(&compressed_snapshot, &snapshot_save_path)?;
+
+    Ok(decompressed_snapshot)
+}
+
+/// Checks a dir for snapshots returning the first file with the name
+/// snapshot in it.
+///
+/// TODO: Implement better verification logic.
+fn get_snapshot_from_cache(snapshot_dir: &Path) -> Option<PathBuf> {
+    if !snapshot_dir.exists() {
+        return None;
+    }
+    for dir_entry in std::fs::read_dir(snapshot_dir)
+        .unwrap_or_else(|e| panic!("Could not list snapshot directory: {}", e))
+    {
+        let dir_entry = dir_entry.unwrap();
+        let file_name = dir_entry.file_name();
+        if file_name.to_string_lossy().contains("snapshot") {
+            return Some(dir_entry.path());
+        }
+    }
+    None
+}
+
 pub mod download {
     //! Provides utilities to download a snapshot.
     use {
@@ -25,16 +112,19 @@ pub mod download {
         Io(#[from] std::io::Error),
     }
 
-    /// Asynchronously downloads a file from the `url` and saves it to
-    /// `save_path`.
+    /// Asynchronously downloads a snapshot from the `url`, saves it to
+    /// `save_path` and returns the path. Initially saves to a temporary
+    /// file and only renames it once the download is complete.
     ///
-    /// It initially saves to a temporary file and only renames once the
-    /// download is complete.
+    /// Downloads the file by sending a `GET` request to the RPC at the URL
+    /// where snapshots are held. It's unusure if this will work for all RPC
+    /// URLs.
+    ///
+    /// TODO: Test with other RPCs.
     pub async fn download_snapshot(
         client: &reqwest::Client,
         url: &str,
         save_path: &Path,
-        progress_bar: &ProgressBar,
     ) -> Result<PathBuf, DownloadError> {
         let mut response = client.get(url).send().await?;
 
@@ -50,7 +140,7 @@ pub mod download {
         }
 
         let file_length = response.content_length().unwrap_or(0); // Might not be provided.
-
+        let progress_bar = ProgressBar::new(0);
         progress_bar.set_length(file_length);
 
         // Use temporary file for safety.
@@ -120,27 +210,30 @@ pub mod download {
             let client = reqwest::Client::new();
             let url = "https://api.mainnet-beta.solana.com/incremental-snapshot.tar.bz2";
             let save_dir = tempfile::tempdir().unwrap();
-            let progress_bar = ProgressBar::new(0);
 
-            download_snapshot(&client, url, save_dir.path(), &progress_bar)
+            download_snapshot(&client, url, save_dir.path())
                 .await
                 .unwrap();
+
+            let snapshot_name = get_file_name_from_url(&reqwest::Url::parse(url).unwrap());
+            let snapshot_path = save_dir.path().join(&snapshot_name);
+            assert!(snapshot_path.is_file())
         }
     }
 }
 
-
 pub mod decompress {
     //! Provides utilities to decompress and unpack a snapshot.
     use {
-        bzip2::read::BzDecoder, indicatif::ProgressBar, 
+        bzip2::read::BzDecoder,
+        indicatif::ProgressBar,
         std::{
             fs,
             io::{BufReader, Read, Write},
-            path::Path,
+            path::{Path, PathBuf},
         },
-        tar::Archive, 
-        tempfile::NamedTempFile, 
+        tar::Archive,
+        tempfile::NamedTempFile,
         zstd::stream::read::Decoder as ZstdDecoder,
     };
 
@@ -156,29 +249,33 @@ pub mod decompress {
         UnknownArchiveType,
     }
 
-    /// Decompresses and unpacks a snapshot.
-    pub fn decompress_and_unpack_snapshot(
-        // TODO: Current approach decompresses to a temporary file before
-        // unpacking. Can stream from decompression to unpacking through 
-        // buffer instead.
+    /// Decompresses and unpacks a snapshot at `compressed_file_path` to
+    /// `decompressed_file_path`.
+    ///
+    /// Returns the path to the decompressed snapshot.
+    ///
+    /// TODO: Current approach decompresses to a temporary file before
+    /// unpacking. Can stream from decompression to unpacking through
+    /// buffer instead.
+    pub(super) fn decompress_and_unpack_snapshot(
         compressed_file_path: &Path,
         decompressed_file_path: &Path,
-    ) -> Result<(), DecompressionError> {
+    ) -> Result<PathBuf, DecompressionError> {
         let tmp_tar_file = NamedTempFile::new()?;
-        let decompression_progress_bar =  ProgressBar::new_spinner();
+        let decompression_progress_bar = ProgressBar::new_spinner();
         match compressed_file_path.extension() {
             Some(extension) => match extension.to_string_lossy().as_ref() {
                 "bz2" => decompress_snapshot_bz2(
                     compressed_file_path,
                     tmp_tar_file.path(),
-                    &decompression_progress_bar
+                    &decompression_progress_bar,
                 )?,
                 "zst" => decompress_snapshot_zstd(
                     compressed_file_path,
                     tmp_tar_file.path(),
-                    &decompression_progress_bar
+                    &decompression_progress_bar,
                 )?,
-                _ => return Err(DecompressionError::UnsupportedArchiveType)
+                _ => return Err(DecompressionError::UnsupportedArchiveType),
             },
 
             None => return Err(DecompressionError::UnknownArchiveType),
@@ -187,34 +284,37 @@ pub mod decompress {
 
         eprintln!("Unpacking archive...");
         let unpacking_progress_bar = ProgressBar::new(0);
-        if !decompressed_file_path.exists(){
+
+        if !decompressed_file_path.exists() {
             std::fs::create_dir_all(decompressed_file_path)?;
         }
 
-        unpack_snapshot(tmp_tar_file.path(),
+        unpack_snapshot(
+            tmp_tar_file.path(),
             decompressed_file_path,
-            &unpacking_progress_bar
+            &unpacking_progress_bar,
         )?;
         unpacking_progress_bar.finish_with_message("Unpacking complete");
         eprintln!("Unpacking complete!");
         eprintln!("Snapshot successfully decompressed and unpacked!");
-        eprintln!("File saved to: {}", decompressed_file_path.to_string_lossy());
+        eprintln!(
+            "File saved to: {}",
+            decompressed_file_path.to_string_lossy()
+        );
 
-        Ok(())
+        Ok(decompressed_file_path.to_path_buf())
     }
 
     fn unpack_snapshot(
         tar_file_path: &Path,
         unpacked_file_dir: &Path,
-        progress_bar: &ProgressBar
+        progress_bar: &ProgressBar,
     ) -> Result<(), DecompressionError> {
         let tar_file = fs::File::open(tar_file_path)?;
         let file_size = tar_file.metadata()?.len();
         progress_bar.set_length(file_size);
 
-        let mut archive = Archive::new(
-            BufReader::new(tar_file)
-        );
+        let mut archive = Archive::new(BufReader::new(tar_file));
 
         for entry in archive.entries()? {
             let mut entry = entry?;
@@ -235,7 +335,7 @@ pub mod decompress {
         progress_bar.set_length(file_size); // N.B: decompressed file is larger.
 
         let mut decompressed_file = fs::File::create(decompressed_file_path)?;
-        
+
         let buf_reader = BufReader::new(compressed_file);
         let buf_reader_capacity = buf_reader.capacity();
         let mut decoder = BzDecoder::new(buf_reader);
@@ -267,9 +367,7 @@ pub mod decompress {
 
         let buf_reader = BufReader::new(compressed_file);
         let buf_reader_capacity = buf_reader.capacity();
-        let mut decoder = ZstdDecoder::new(
-            buf_reader
-        )?;
+        let mut decoder = ZstdDecoder::new(buf_reader)?;
         let mut buffer = vec![0; buf_reader_capacity];
 
         loop {

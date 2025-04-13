@@ -10,27 +10,38 @@ edition = { workspace = true }
 
 [dependencies]
 agave-banking-stage-ingress-types = { workspace = true }
+anyhow.workspace = true
 assert_matches = { workspace = true }
+bs58.workspace = true
 bzip2.workspace = true
-clap = { version = "3.1.8", features = ["derive", "cargo"] }
+clap = { version = "4.5.36", features = ["derive", "cargo"] }
 crossbeam-channel = { workspace = true }
+futures.workspace = true
 indicatif.workspace = true
 log = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }
 reqwest.workspace = true
+solana-accounts-db.workspace = true
 solana-client = { workspace = true }
 solana-core = { workspace = true, features = ["dev-context-only-utils"] }
 solana-gossip = { workspace = true }
+solana-hash.workspace = true
 solana-ledger = { workspace = true }
 solana-logger = { workspace = true }
 solana-measure = { workspace = true }
+solana-message.workspace = true
 solana-perf = { workspace = true }
 solana-poh = { workspace = true, features = ["dev-context-only-utils"] }
+solana-program.workspace = true
+solana-pubkey.workspace = true
 solana-runtime = { workspace = true, features = ["dev-context-only-utils"] }
 solana-sdk = { workspace = true }
+solana-signature.workspace = true
 solana-streamer = { workspace = true }
 solana-tpu-client = { workspace = true }
+solana-transaction.workspace = true
+solana-transaction-status-client-types.workspace = true
 solana-version = { workspace = true }
 tar.workspace = true
 tempfile.workspace = true
