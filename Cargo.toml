@@ -25,6 +25,7 @@ members = [
     "accounts-db/store-histogram",
     "accounts-db/store-tool",
     "banking-bench",
+    "banking-bench-historical",
     "banking-stage-ingress-types",
     "banks-client",
     "banks-interface",
@@ -192,10 +193,6 @@ ahash = "0.8.11"
 anyhow = "1.0.97"
 arbitrary = "1.4.1"
 ark-bn254 = "0.4.0"
-ark-ec = "0.4.0"
-ark-ff = "0.4.0"
-ark-serialize = "0.4.0"
-array-bytes = "=1.4.1"
 arrayref = "0.3.9"
 arrayvec = "0.7.6"
 assert_cmd = "2.0"
@@ -210,7 +207,6 @@ bincode = "1.3.3"
 bitflags = { version = "2.9.0" }
 blake3 = "1.8.1"
 borsh = { version = "1.5.7", features = ["derive", "unstable__schema"] }
-borsh0-10 = { package = "borsh", version = "0.10.3" }
 bs58 = { version = "0.5.1", default-features = false }
 bv = "0.11.1"
 byte-unit = "4.0.19"
@@ -220,14 +216,11 @@ bytes = "1.10"
 bzip2 = "0.4.4"
 caps = "0.5.5"
 cargo_metadata = "0.15.4"
-cfg_eval = "0.1.2"
 cfg-if = "1.0.0"
 chrono = { version = "0.4.40", default-features = false }
 chrono-humanize = "0.2.3"
 clap = "2.33.1"
 console = "0.15.11"
-console_error_panic_hook = "0.1.7"
-console_log = "0.2.2"
 const_format = "0.2.34"
 core_affinity = "0.5.10"
 # Remove this dependency when procedural macros will support non-inline modules.
@@ -239,7 +232,6 @@ csv = "1.3.1"
 ctrlc = "3.4.5"
 curve25519-dalek = { version = "4.1.3", features = ["digest", "rand_core"] }
 dashmap = "5.5.3"
-derivation-path = { version = "0.2.0", default-features = false }
 derive-where = "1.2.7"
 derive_more = { version = "1.0.0", features = ["full"] }
 dialoguer = "0.10.4"
@@ -250,27 +242,23 @@ dlopen2 = "0.5.0"
 dyn-clone = "1.0.19"
 eager = "0.1.0"
 ed25519-dalek = "=1.0.1"
-ed25519-dalek-bip32 = "0.2.0"
 enum-iterator = "1.5.0"
 env_logger = "0.9.3"
 etcd-client = "0.11.1"
 fast-math = "0.1"
 fd-lock = "3.0.13"
 flate2 = "1.0.31"
-five8_const = "0.1.4"
 fnv = "1.0.7"
 fs_extra = "1.3.0"
 futures = "0.3.31"
 futures-util = "0.3.29"
 gag = "1.0.0"
 gethostname = "0.2.3"
-getrandom = "0.3.2"
 goauth = "0.13.1"
 governor = "0.6.3"
 hex = "0.4.3"
 hidapi = { version = "2.6.3", default-features = false }
 histogram = "0.6.9"
-hmac = "0.12.1"
 http = "0.2.12"
 humantime = "2.2.0"
 hyper = "0.14.32"
@@ -309,21 +297,18 @@ min-max-heap = "1.3.0"
 mockall = "0.11.4"
 modular-bitfield = "0.11.2"
 nix = "0.29.0"
-num-bigint = "0.4.6"
 num-derive = "0.4"
 num-traits = "0.2"
 num_cpus = "1.16.0"
 num_enum = "0.7.3"
 openssl = "0.10"
 parking_lot = "0.12"
-pbkdf2 = { version = "0.11.0", default-features = false }
 pem = "1.1.1"
 percentage = "0.1.0"
 pickledb = { version = "0.5.1", default-features = false }
 predicates = "2.1"
 pretty-hex = "0.3.0"
 prio-graph = "0.3.0"
-proc-macro2 = "1.0.94"
 proptest = "1.6"
 prost = "0.11.9"
 prost-build = "0.11.9"
@@ -333,7 +318,6 @@ qstring = "0.7.2"
 qualifier_attr = { version = "0.2.2", default-features = false }
 quinn = "0.11.7"
 quinn-proto = "0.11.10"
-quote = "1.0"
 rand = "0.8.5"
 rand0-7 = { package = "rand", version = "0.7" }
 rand_chacha = "0.3.1"
@@ -374,7 +358,6 @@ solana-account-info = "2.2.1"
 solana-accounts-db = { path = "accounts-db", version = "=2.3.0" }
 solana-address-lookup-table-interface = "2.2.2"
 solana-address-lookup-table-program = { path = "programs/address-lookup-table", version = "=2.3.0" }
-solana-atomic-u64 = "2.2.1"
 solana-banks-client = { path = "banks-client", version = "=2.3.0" }
 solana-banks-interface = { path = "banks-interface", version = "=2.3.0" }
 solana-banks-server = { path = "banks-server", version = "=2.3.0" }
@@ -389,8 +372,6 @@ solana-bpf-loader-program = { path = "programs/bpf_loader", version = "=2.3.0" }
 solana-bucket-map = { path = "bucket_map", version = "=2.3.0" }
 solana-builtins = { path = "builtins", version = "=2.3.0" }
 solana-builtins-default-costs = { path = "builtins-default-costs", version = "=2.3.0" }
-agave-cargo-registry = { path = "cargo-registry", version = "=2.3.0" }
-agave-thread-manager = { path = "thread-manager", version = "=2.3.0" }
 solana-clap-utils = { path = "clap-utils", version = "=2.3.0" }
 solana-clap-v3-utils = { path = "clap-v3-utils", version = "=2.3.0" }
 solana-cli = { path = "cli", version = "=2.3.0" }
@@ -411,7 +392,6 @@ solana-core = { path = "core", version = "=2.3.0" }
 solana-cost-model = { path = "cost-model", version = "=2.3.0" }
 solana-cpi = "2.2.1"
 solana-curve25519 = { path = "curves/curve25519", version = "=2.3.0" }
-solana-decode-error = "2.2.1"
 solana-define-syscall = "2.2.1"
 solana-derivation-path = "2.2.1"
 solana-download-utils = { path = "download-utils", version = "=2.3.0" }
@@ -420,11 +400,8 @@ solana-entry = { path = "entry", version = "=2.3.0" }
 solana-program-entrypoint = "2.2.1"
 solana-epoch-info = "2.2.1"
 solana-epoch-rewards = "2.2.1"
-solana-epoch-rewards-hasher = "2.2.1"
 solana-epoch-schedule = "2.2.1"
-solana-example-mocks = "2.2.1"
 solana-faucet = { path = "faucet", version = "=2.3.0" }
-solana-feature-gate-client = "0.0.2"
 solana-feature-gate-interface = "2.2.1"
 solana-fee-calculator = "2.2.1"
 solana-fee = { path = "fee", version = "=2.3.0" }
@@ -439,7 +416,6 @@ solana-genesis-utils = { path = "genesis-utils", version = "=2.3.0" }
 agave-geyser-plugin-interface = { path = "geyser-plugin-interface", version = "=2.3.0" }
 solana-geyser-plugin-manager = { path = "geyser-plugin-manager", version = "=2.3.0" }
 solana-gossip = { path = "gossip", version = "=2.3.0" }
-solana-hard-forks = "2.2.1"
 solana-hash = "2.2.1"
 solana-inflation = "2.2.1"
 solana-inline-spl = { path = "inline-spl", version = "=2.3.0" }
@@ -461,7 +437,6 @@ solana-measure = { path = "measure", version = "=2.3.0" }
 solana-merkle-tree = { path = "merkle-tree", version = "=2.3.0" }
 solana-message = "2.3.0"
 solana-metrics = { path = "metrics", version = "=2.3.0" }
-solana-msg = "2.2.1"
 solana-native-token = "2.2.1"
 solana-net-utils = { path = "net-utils", version = "=2.3.0" }
 solana-nohash-hasher = "0.2.1"
@@ -469,8 +444,6 @@ solana-nonce = "2.2.1"
 solana-nonce-account = "2.2.1"
 solana-notifier = { path = "notifier", version = "=2.3.0" }
 solana-offchain-message = "2.2.1"
-solana-package-metadata = "2.2.1"
-solana-package-metadata-macro = "2.2.1"
 solana-packet = "2.2.1"
 solana-perf = { path = "perf", version = "=2.3.0" }
 solana-poh = { path = "poh", version = "=2.3.0" }
@@ -479,8 +452,6 @@ solana-poseidon = { path = "poseidon", version = "=2.3.0" }
 solana-precompile-error = "2.2.1"
 solana-presigner = "2.2.1"
 solana-program = { version = "2.2.1", default-features = false }
-solana-program-error = "2.2.1"
-solana-program-memory = "2.2.1"
 solana-program-option = "2.2.1"
 solana-program-pack = "2.2.1"
 solana-program-runtime = { path = "program-runtime", version = "=2.3.0" }
@@ -522,7 +493,6 @@ solana-runtime-transaction = { path = "runtime-transaction", version = "=2.3.0" 
 solana-sbpf = "=0.10.0"
 solana-sdk = "2.2.2"
 solana-sdk-ids = "2.2.1"
-solana-sdk-macro = "2.2.1"
 solana-secp256k1-program = "2.2.1"
 solana-secp256k1-recover = "2.2.1"
 solana-send-transaction-service = { path = "send-transaction-service", version = "=2.3.0" }
@@ -557,14 +527,12 @@ solana-transaction-metrics-tracker = { path = "transaction-metrics-tracker", ver
 solana-turbine = { path = "turbine", version = "=2.3.0" }
 solana-type-overrides = { path = "type-overrides", version = "=2.3.0" }
 solana-udp-client = { path = "udp-client", version = "=2.3.0" }
-solana-validator-exit = "2.2.1"
 solana-version = { path = "version", version = "=2.3.0" }
 solana-vote = { path = "vote", version = "=2.3.0" }
 solana-vote-interface = "2.2.3"
 solana-vote-program = { path = "programs/vote", version = "=2.3.0", default-features = false }
 solana-wen-restart = { path = "wen-restart", version = "=2.3.0" }
 solana-zk-elgamal-proof-program = { path = "programs/zk-elgamal-proof", version = "=2.3.0" }
-solana-zk-keygen = { path = "zk-keygen", version = "=2.3.0" }
 solana-zk-sdk = { path = "zk-sdk", version = "=2.3.0" }
 solana-zk-token-proof-program = { path = "programs/zk-token-proof", version = "=2.3.0" }
 solana-zk-token-sdk = { path = "zk-token-sdk", version = "=2.3.0" }
@@ -583,7 +551,6 @@ strum = "0.24"
 strum_macros = "0.24"
 subtle = "2.6.1"
 symlink = "0.1.0"
-syn = "2.0"
 sys-info = "0.9.1"
 sysctl = "0.4.6"
 systemstat = "0.2.4"
