@@ -8,8 +8,8 @@ use {
     log::*,
     solana_accounts_db::accounts_db::ACCOUNTS_DB_CONFIG_FOR_BENCHMARKS,
     solana_banking_bench_historical::{
-        snapshot::download::download_snapshot,
-        transactions,
+        snapshot::process_snapshot,
+        transactions, SOLANA_NETWORK_CREATION_TIME,
     },
     solana_client::nonblocking::rpc_client::RpcClient,
     solana_core::{
@@ -35,14 +35,13 @@ use {
         snapshot_bank_utils::bank_from_snapshot_archives,
     },
     solana_sdk::{
-        hash::Hash,
-        signature::{Keypair, Signer},
-        genesis_config::create_genesis_config,
+        genesis_config::create_genesis_config, hash::Hash, signature::{Keypair, Signer}
     },
     solana_streamer::socket::SocketAddrSpace,
     solana_transaction::versioned::VersionedTransaction,
     std::{
         path::PathBuf,
+        str::FromStr,
         sync::{
             atomic::{AtomicBool, Ordering},
             Arc, RwLock,
@@ -56,7 +55,11 @@ use {
 struct CliArgs {
     /// RPC URL to connect to target cluster.
     #[arg(short, long, default_value = "https://api.mainnet-beta.solana.com")]
-    url: String,
+    rpc_url: String,
+
+    /// Path from which to download the snapshot.
+    #[arg(short, long, default_value = "https://api.mainnet-beta.solana.com/snapshot.tar.bz2")]
+    snapshot_url: String,
 
     /// Enable banking trace.
     #[arg(short, long, action = clap::ArgAction::SetTrue)]
@@ -66,7 +69,8 @@ struct CliArgs {
     #[arg(
         short,
         long,
-        value_parser = clap::builder::PossibleValuesParser::new(BlockProductionMethod::cli_names()),
+        help = BlockProductionMethod::cli_message(),
+        value_parser = parse_block_production_method,
         default_value = "central-scheduler-greedy"
     )]
     block_production_method: BlockProductionMethod,
@@ -79,8 +83,9 @@ struct CliArgs {
     #[arg(
         short,
         long,
-        value_parser = clap::builder::PossibleValuesParser::new(TransactionStructure::cli_names()),
-        default_value = "sdk",
+        help = TransactionStructure::cli_message(),
+        value_parser = parse_transaction_structure,
+        default_value = "sdk"
     )]
     transaction_structure: TransactionStructure,
 
@@ -88,9 +93,29 @@ struct CliArgs {
     #[arg(short, long, default_value_t = 10)]
     num_blocks: u64,
 
-    /// Directory to unpack the snapshot to
-    #[arg(short, long, default_value_os_t = default_snapshot_path())]
+    /// Directory to unpack files to. Defaults to pwd.
+    #[arg(short, long, default_value_os_t = default_working_dir())]
     working_dir: PathBuf,
+}
+
+fn parse_block_production_method(s: &str) -> Result<BlockProductionMethod, String> {
+    if !BlockProductionMethod::cli_names().contains(&s) {
+        return Err(format!(
+            "Invalid block production method. Possible values are: {:?}",
+            BlockProductionMethod::cli_names()
+        ));
+    }
+    BlockProductionMethod::from_str(s).map_err(|e| e.to_string())
+}
+
+fn parse_transaction_structure(s: &str) -> Result<TransactionStructure, String> {
+    if !TransactionStructure::cli_names().contains(&s) {
+        return Err(format!(
+            "Invalid transaction structure. Possible values are: {:?}",
+            TransactionStructure::cli_names()
+        ));
+    }
+    TransactionStructure::from_str(s).map_err(|e| e.to_string())
 }
 
 /// Get the path where the snapshot should be saved to.
@@ -98,8 +123,8 @@ struct CliArgs {
 ///
 /// Currently saves to the PWD.
 /// TODO: Implement better logic. Can use `directories` package.
-fn default_snapshot_path() -> PathBuf {
-    PathBuf::from(std::env::current_dir().expect("Failed to get current dir.")).join("snapshot")
+fn default_working_dir() -> PathBuf {
+    PathBuf::from(std::env::current_dir().expect("Failed to get current dir."))
 }
 
 #[tokio::main]
@@ -111,7 +136,11 @@ async fn main() -> Result<()> {
     let transaction_struct = args.transaction_structure;
     let num_execution_threads = args.num_execution_threads;
     let working_dir = args.working_dir;
-    let rpc_url = args.url;
+    let rpc_url = args.rpc_url;
+    let snapshot_url = args.snapshot_url;
+
+    let rpc_client = RpcClient::new(rpc_url.clone());
+    let reqwest_client = reqwest::Client::new();
 
     // Setup
     // - Fetch snapshot metadata,
@@ -119,18 +148,23 @@ async fn main() -> Result<()> {
     // - Download blocks,
     // - Create bank.
 
-    let rpc_client = RpcClient::new(rpc_url.clone());
-    let reqwest_client = reqwest::Client::new();
-
     let snapshot_dir = working_dir.join("snapshots");
-    let downloaded_snapshot_path =
-        download_snapshot(&reqwest_client, &rpc_url, &working_dir).await?;
+    
+    let downloaded_snapshot_path = process_snapshot(
+        &reqwest_client,
+        &snapshot_url,
+        &snapshot_dir, 
+    ).await?;
+
     let accounts_dir = working_dir.join("accounts");
-    let snapshot_archive_info = FullSnapshotArchiveInfo::new_from_path(downloaded_snapshot_path)?;
+
+    let snapshot_archive_info = FullSnapshotArchiveInfo::new_from_path(downloaded_snapshot_path.into())?;
 
     let snapshot_slot = snapshot_archive_info.snapshot_archive_info().slot;
 
-    let (genesis_config, _) = create_genesis_config(5000);
+    let (mut genesis_config, _) = create_genesis_config(5000);
+
+    genesis_config.creation_time = SOLANA_NETWORK_CREATION_TIME;
 
     let (replay_vote_sender, _replay_vote_receiver) = unbounded();
 
@@ -153,7 +187,10 @@ async fn main() -> Result<()> {
         Arc::new(AtomicBool::new(false)),
     )?;
 
+    info!("bank sucessfully built from compressed snapshot!");
+
     let snapshot_bank_forks = BankForks::new_rw_arc(snapshot_bank);
+    // Actual bank to be used.
     let mut bank = snapshot_bank_forks
         .read()
         .unwrap()
@@ -247,6 +284,8 @@ async fn main() -> Result<()> {
 
     let now = Instant::now();
 
+    debug!("Beginning execution");
+
     non_vote_sender.send(BankingPacketBatch::new(packet_batch.packet_batch.clone()))?;
 
     for tx in &packet_batch.transactions {
@@ -307,7 +346,6 @@ async fn main() -> Result<()> {
         );
 
         bank.clear_signatures(); // Inserted to make rust analyser happy
-    } else {
     }
 
     drop(non_vote_sender);
@@ -350,7 +388,8 @@ impl Packets {
     }
 }
 
-// Stops after 60 s
+/// Check if a bnak instance is still processing.
+/// Stops after 60 s.
 fn check_txs(
     receiver: &Arc<Receiver<WorkingBankEntry>>,
     ref_tx_count: usize,
