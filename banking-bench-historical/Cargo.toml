@@ -25,6 +25,7 @@ rayon = { workspace = true }
 reqwest.workspace = true
 solana-accounts-db.workspace = true
 solana-client = { workspace = true }
+solana-clock.workspace = true
 solana-core = { workspace = true, features = ["dev-context-only-utils"] }
 solana-gossip = { workspace = true }
 solana-hash.workspace = true

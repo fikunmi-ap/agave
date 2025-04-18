@@ -6707,6 +6707,7 @@ dependencies = [
  "reqwest 0.12.15",
  "solana-accounts-db",
  "solana-client",
+ "solana-clock",
  "solana-core",
  "solana-gossip",
  "solana-hash",

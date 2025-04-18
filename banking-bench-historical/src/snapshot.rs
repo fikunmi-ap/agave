@@ -33,7 +33,7 @@ pub async fn process_snapshot(
     Ok(compressed_snapshot)
 }
 
-/// Finds the first file containing "snapshot" in its name within the given directory.
+/// Finds the first file that starts with "snapshot-" within the given directory.
 ///
 /// # Arguments
 /// * `snapshot_dir` - The directory path to search for snapshot files
@@ -41,7 +41,9 @@ pub async fn process_snapshot(
 /// # Returns
 /// * `Ok(Some(PathBuf))` - If a snapshot file is found
 /// * `Ok(None)` - If no snapshot file is found
-/// * `Err(io::Error)` - If there's an error accessing the directory
+/// * `Err(io::Error)` - If there's an error accessing the directory.
+/// 
+/// TODO: Implement better verification for the snapshot file, maybe a RE.
 fn get_snapshot_from_cache(snapshot_dir: &Path) -> io::Result<Option<PathBuf>> {
     // Check if directory exists
     if !snapshot_dir.exists() {
@@ -64,7 +66,7 @@ fn get_snapshot_from_cache(snapshot_dir: &Path) -> io::Result<Option<PathBuf>> {
             entry
                 .file_name()
                 .to_string_lossy()
-                .contains("snapshot")
+                .starts_with("snapshot-")
         })
         .map(|entry| entry.path())
     )

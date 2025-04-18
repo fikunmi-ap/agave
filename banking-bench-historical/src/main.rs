@@ -8,8 +8,7 @@ use {
     log::*,
     solana_accounts_db::accounts_db::ACCOUNTS_DB_CONFIG_FOR_BENCHMARKS,
     solana_banking_bench_historical::{
-        snapshot::process_snapshot,
-        transactions, SOLANA_NETWORK_CREATION_TIME,
+        snapshot::process_snapshot, transactions, Network,
     },
     solana_client::nonblocking::rpc_client::RpcClient,
     solana_core::{
@@ -20,6 +19,7 @@ use {
     solana_gossip::cluster_info::{ClusterInfo, Node},
     solana_ledger::{
         blockstore::Blockstore,
+        genesis_utils::{create_genesis_config, GenesisConfigInfo},
         get_tmp_ledger_path_auto_delete,
         leader_schedule_cache::LeaderScheduleCache,
     },
@@ -35,7 +35,7 @@ use {
         snapshot_bank_utils::bank_from_snapshot_archives,
     },
     solana_sdk::{
-        genesis_config::create_genesis_config, hash::Hash, signature::{Keypair, Signer}
+        hash::Hash, signature::{Keypair, Signer}
     },
     solana_streamer::socket::SocketAddrSpace,
     solana_transaction::versioned::VersionedTransaction,
@@ -51,82 +51,6 @@ use {
     },
 };
 
-#[derive(Parser)]
-struct CliArgs {
-    /// RPC URL to connect to target cluster.
-    #[arg(short, long, default_value = "https://api.mainnet-beta.solana.com")]
-    rpc_url: String,
-
-    /// Path from which to download the snapshot.
-    #[arg(short, long, default_value = "https://api.mainnet-beta.solana.com/snapshot.tar.bz2")]
-    snapshot_url: String,
-
-    /// Enable banking trace.
-    #[arg(short, long, action = clap::ArgAction::SetTrue)]
-    trace_banking: bool,
-
-    /// Block production method.
-    #[arg(
-        short,
-        long,
-        help = BlockProductionMethod::cli_message(),
-        value_parser = parse_block_production_method,
-        default_value = "central-scheduler-greedy"
-    )]
-    block_production_method: BlockProductionMethod,
-
-    /// Number of execution threads.
-    #[arg(short, long, default_value_t = 4)]
-    num_execution_threads: u32,
-
-    /// Transaction structure.
-    #[arg(
-        short,
-        long,
-        help = TransactionStructure::cli_message(),
-        value_parser = parse_transaction_structure,
-        default_value = "sdk"
-    )]
-    transaction_structure: TransactionStructure,
-
-    /// Number of blocks to reexecute.
-    #[arg(short, long, default_value_t = 10)]
-    num_blocks: u64,
-
-    /// Directory to unpack files to. Defaults to pwd.
-    #[arg(short, long, default_value_os_t = default_working_dir())]
-    working_dir: PathBuf,
-}
-
-fn parse_block_production_method(s: &str) -> Result<BlockProductionMethod, String> {
-    if !BlockProductionMethod::cli_names().contains(&s) {
-        return Err(format!(
-            "Invalid block production method. Possible values are: {:?}",
-            BlockProductionMethod::cli_names()
-        ));
-    }
-    BlockProductionMethod::from_str(s).map_err(|e| e.to_string())
-}
-
-fn parse_transaction_structure(s: &str) -> Result<TransactionStructure, String> {
-    if !TransactionStructure::cli_names().contains(&s) {
-        return Err(format!(
-            "Invalid transaction structure. Possible values are: {:?}",
-            TransactionStructure::cli_names()
-        ));
-    }
-    TransactionStructure::from_str(s).map_err(|e| e.to_string())
-}
-
-/// Get the path where the snapshot should be saved to.
-/// The snapshot will be unpacked to the same directory.
-///
-/// Currently saves to the PWD.
-/// TODO: Implement better logic. Can use `directories` package.
-fn default_working_dir() -> PathBuf {
-    PathBuf::from(std::env::current_dir().expect("Failed to get current dir."))
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     solana_logger::setup();
@@ -136,17 +60,20 @@ async fn main() -> Result<()> {
     let transaction_struct = args.transaction_structure;
     let num_execution_threads = args.num_execution_threads;
     let working_dir = args.working_dir;
-    let rpc_url = args.rpc_url;
-    let snapshot_url = args.snapshot_url;
 
-    let rpc_client = RpcClient::new(rpc_url.clone());
+    let network = args.network;
+    let rpc_url = network.rpc_url();
+    let snapshot_url = network.snapshot_url();
+
+    let rpc_client = RpcClient::new(rpc_url.to_string());
     let reqwest_client = reqwest::Client::new();
 
     // Setup
     // - Fetch snapshot metadata,
-    // - Determine if it makes sense to replay,
     // - Download blocks,
     // - Create bank.
+    // TODO: Add logic that determines if it makes sense to replay now
+    // based on the number of blocks specified.
 
     let snapshot_dir = working_dir.join("snapshots");
     
@@ -162,9 +89,12 @@ async fn main() -> Result<()> {
 
     let snapshot_slot = snapshot_archive_info.snapshot_archive_info().slot;
 
-    let (mut genesis_config, _) = create_genesis_config(5000);
+    let GenesisConfigInfo{
+        mut genesis_config,
+        .. 
+    } = create_genesis_config(5000);
 
-    genesis_config.creation_time = SOLANA_NETWORK_CREATION_TIME;
+    genesis_config.creation_time = network.creation_time();
 
     let (replay_vote_sender, _replay_vote_receiver) = unbounded();
 
@@ -200,20 +130,6 @@ async fn main() -> Result<()> {
     bank.write_cost_tracker()
         .unwrap()
         .set_limits(u64::MAX, u64::MAX, u64::MAX);
-
-    let transactions = transactions::download_decode_and_filter_blocks(
-        &rpc_client,
-        snapshot_slot,
-        args.num_blocks,
-    )
-    .await?;
-
-    let num_transactions = transactions.len();
-
-    info!(
-        "Number of Executing Threads: {}, Number of Transactions: {}",
-        args.num_execution_threads, num_transactions
-    );
 
     let ledger_path = get_tmp_ledger_path_auto_delete!();
     let blockstore =
@@ -280,6 +196,20 @@ async fn main() -> Result<()> {
 
     let collector = solana_sdk::pubkey::new_rand();
 
+    let transactions = transactions::download_decode_and_filter_blocks(
+        &rpc_client,
+        snapshot_slot,
+        args.num_blocks,
+    )
+    .await?;
+
+    let num_transactions = transactions.len();
+
+    info!(
+        "Number of Executing Threads: {}, Number of Transactions: {}",
+        args.num_execution_threads, num_transactions
+    );
+
     let packet_batch = Packets::new(transactions);
 
     let now = Instant::now();
@@ -302,9 +232,12 @@ async fn main() -> Result<()> {
 
     if check_txs(&signal_receiver, num_transactions, &poh_recorder) {
         let tx_total_us = now.elapsed().as_micros();
+
         eprintln!(
-            "[num_transaction: {}, time_taken_in_seconds: {}]",
-            num_transactions, tx_total_us,
+            "[num_transactions: {}, time_taken_in_micro_seconds: {}, throughput: {} TPS]",
+            num_transactions,
+            tx_total_us,
+            num_transactions as f64 / ((tx_total_us * 1000 * 1000) as f64)
         );
 
         let mut poh_time = Measure::start("poh_time");
@@ -363,6 +296,88 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+#[derive(Parser)]
+struct CliArgs {
+/*     /// RPC URL to connect to target cluster.
+    #[arg(short, long, default_value = "https://api.mainnet-beta.solana.com")]
+    rpc_url: String,
+
+    /// Path from which to download the snapshot.
+    #[arg(short, long, default_value = "https://api.mainnet-beta.solana.com/snapshot.tar.bz2")]
+    snapshot_url: String, */
+
+    /// Network
+    #[arg(short, long, default_value = "solana-testnet")]
+    network: Network,
+
+    /// Enable banking trace.
+    #[arg(short, long, action = clap::ArgAction::SetTrue)]
+    trace_banking: bool,
+
+    /// Block production method.
+    #[arg(
+        short,
+        long,
+        help = BlockProductionMethod::cli_message(),
+        value_parser = Self::parse_block_production_method,
+        default_value = "central-scheduler-greedy"
+    )]
+    block_production_method: BlockProductionMethod,
+
+    /// Number of execution threads.
+    #[arg(short, long, default_value_t = 4)]
+    num_execution_threads: u32,
+
+    /// Transaction structure.
+    #[arg(
+        short,
+        long,
+        help = TransactionStructure::cli_message(),
+        value_parser = Self::parse_transaction_structure,
+        default_value = "sdk"
+    )]
+    transaction_structure: TransactionStructure,
+
+    /// Number of blocks to reexecute.
+    #[arg(short, long, default_value_t = 10)]
+    num_blocks: u64,
+
+    /// Directory to unpack files to. Defaults to pwd.
+    #[arg(short, long, default_value_os_t = Self::default_working_dir())]
+    working_dir: PathBuf,
+}
+
+impl CliArgs {
+    fn parse_block_production_method(s: &str) -> Result<BlockProductionMethod, String> {
+        if !BlockProductionMethod::cli_names().contains(&s) {
+            return Err(format!(
+                "Invalid block production method. Possible values are: {:?}",
+                BlockProductionMethod::cli_names()
+            ));
+        }
+        BlockProductionMethod::from_str(s).map_err(|e| e.to_string())
+    }
+
+    fn parse_transaction_structure(s: &str) -> Result<TransactionStructure, String> {
+        if !TransactionStructure::cli_names().contains(&s) {
+            return Err(format!(
+                "Invalid transaction structure. Possible values are: {:?}",
+                TransactionStructure::cli_names()
+            ));
+        }
+        TransactionStructure::from_str(s).map_err(|e| e.to_string())
+    }
+
+    /// Get the path where the snapshot should be saved to.
+    /// The snapshot will be unpacked to the same directory.
+    ///
+    /// Currently saves to the PWD.
+    /// TODO: Implement better logic. Can use `directories` package.
+    fn default_working_dir() -> PathBuf {
+        PathBuf::from(std::env::current_dir().expect("Failed to get current dir."))
+    }
+}
+
 /// Convienience data structure representing a `Vec` of packets.
 ///
 /// TODO: Implement as Vec<Packet> instead of PacketBatches
@@ -388,7 +403,7 @@ impl Packets {
     }
 }
 
-/// Check if a bnak instance is still processing.
+/// Check if a bank instance is still processing.
 /// Stops after 60 s.
 fn check_txs(
     receiver: &Arc<Receiver<WorkingBankEntry>>,
