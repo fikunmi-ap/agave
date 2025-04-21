@@ -6727,6 +6727,7 @@ dependencies = [
  "solana-transaction",
  "solana-transaction-status-client-types",
  "solana-version",
+ "solana-vote-program",
  "strum",
  "tar",
  "tempfile",
