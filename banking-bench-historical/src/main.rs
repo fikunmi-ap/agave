@@ -241,7 +241,7 @@ async fn main() -> Result<()> {
             "[num_transactions: {}, time_taken_in_micro_seconds: {}, throughput: {} TPS]",
             num_transactions,
             tx_total_us,
-            num_transactions as f64 / ((tx_total_us * 1000 * 1000) as f64)
+            (num_transactions as f64 / (tx_total_us as f64)) * 1000f64 * 1000f64
         );
 
         let mut poh_time = Measure::start("poh_time");
