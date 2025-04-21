@@ -2,7 +2,6 @@
 use {
     agave_banking_stage_ingress_types::BankingPacketBatch,
     anyhow::Result,
-    assert_matches::assert_matches,
     clap::Parser,
     crossbeam_channel::{unbounded, Receiver},
     log::*,
@@ -12,7 +11,7 @@ use {
     },
     solana_client::nonblocking::rpc_client::RpcClient,
     solana_core::{
-        banking_stage::{update_bank_forks_and_poh_recorder_for_new_tpu_bank, BankingStage},
+        banking_stage:: BankingStage,
         banking_trace::{BankingTracer, Channels, BANKING_TRACE_DIR_DEFAULT_BYTE_LIMIT},
         validator::{BlockProductionMethod, TransactionStructure},
     },
@@ -23,7 +22,6 @@ use {
         get_tmp_ledger_path_auto_delete,
         leader_schedule_cache::LeaderScheduleCache,
     },
-    solana_measure::measure::Measure,
     solana_perf::packet::{to_packet_batches, PacketBatch},
     solana_poh::poh_recorder::{create_test_recorder, PohRecorder, WorkingBankEntry},
     solana_runtime::{
@@ -124,7 +122,7 @@ async fn main() -> Result<()> {
 
     let snapshot_bank_forks = BankForks::new_rw_arc(snapshot_bank);
     // Actual bank to be used.
-    let mut bank = snapshot_bank_forks
+    let bank = snapshot_bank_forks
         .read()
         .unwrap()
         .working_bank_with_scheduler();
@@ -198,8 +196,6 @@ async fn main() -> Result<()> {
 
     let signal_receiver = Arc::new(signal_receiver);
 
-    let collector = solana_sdk::pubkey::new_rand();
-
     let transactions = transactions::download_decode_and_filter_blocks(
         &rpc_client,
         snapshot_slot + 1, //block right after snapshot
@@ -243,46 +239,6 @@ async fn main() -> Result<()> {
             tx_total_us,
             (num_transactions as f64 / (tx_total_us as f64)) * 1000f64 * 1000f64
         );
-
-        let mut poh_time = Measure::start("poh_time");
-        poh_recorder
-            .write()
-            .unwrap()
-            .reset(bank.clone(), Some((bank.slot(), bank.slot() + 1)));
-        poh_time.stop();
-
-        let mut new_bank_time = Measure::start("new_bank");
-        if let Some((result, _timings)) = bank.wait_for_completed_scheduler() {
-            assert_matches!(result, Ok(_));
-        }
-        let new_slot = bank.slot() + 1;
-        let new_bank = Bank::new_from_parent(bank.clone(), &collector, new_slot);
-        new_bank_time.stop();
-
-        let mut insert_time = Measure::start("insert_time");
-        assert_matches!(poh_recorder.read().unwrap().bank(), None);
-        update_bank_forks_and_poh_recorder_for_new_tpu_bank(
-            &snapshot_bank_forks,
-            &poh_recorder,
-            new_bank,
-            false,
-        );
-
-        bank = snapshot_bank_forks
-            .read()
-            .unwrap()
-            .working_bank_with_scheduler();
-        assert_matches!(poh_recorder.read().unwrap().bank(), Some(_));
-        insert_time.stop();
-
-        debug!(
-            "new_bank_time: {}us insert_time: {}us poh_time: {}us",
-            new_bank_time.as_us(),
-            insert_time.as_us(),
-            poh_time.as_us(),
-        );
-
-        bank.clear_signatures(); // Inserted to make rust analyser happy
     }
 
     drop(non_vote_sender);
