@@ -70,6 +70,7 @@ async fn main() -> Result<()> {
     let working_dir = args.working_dir;
 
     let network = args.network;
+    // Could change to CLI value in the future.
     let rpc_url = network.rpc_url();
     let snapshot_url = network.snapshot_url();
 
@@ -258,7 +259,7 @@ async fn main() -> Result<()> {
 
 #[derive(Parser)]
 struct CliArgs {
-/*     /// RPC URL to connect to target cluster.
+/*  /// RPC URL to connect to target cluster.
     #[arg(short, long, default_value = "https://api.mainnet-beta.solana.com")]
     rpc_url: String,
 
@@ -339,8 +340,6 @@ impl CliArgs {
 }
 
 /// Convienience data structure representing a `Vec` of packets.
-///
-/// TODO: Implement as Vec<Packet> instead of PacketBatches
 struct Packets {
     packet_batch: Vec<PacketBatch>,
     transactions: Vec<VersionedTransaction>,
