@@ -1,4 +1,4 @@
-//! Provides utilities to download, decompress and unpack a snapshot.
+//! Provides utilities to download a valid Solana snapshot.
 
 use {
     anyhow::Result,
@@ -10,16 +10,18 @@ use {
 /// Processes a snapshot and returns the path to the
 /// processed snapshot.
 /// 
-/// - Checks if there is a snapshot in `save_dir`.
-/// - If there isn't, it downloads and the latest
-/// available snapshot from the RPC URL.
+/// - Checks first if there is a snapshot in `save_dir`.
+///    - If there is, it returns that
+///    - If there isn't, it downloads the latest
+/// available snapshot from the snapshot URL.
 ///
 ///
 /// NOTE: If you want to use an exisiting snapshot, the
-/// `save_dir` path must contain a valid snapshot file, with
-/// "snapshot" and the slot when the snapshot was made in
-/// the file name, if it doesn't the process will ignore it
-/// and download another snapshot.
+/// `save_dir` path must contain a valid and appropriately
+/// named snapshot file, current convention for naming
+/// snapshot is `snapshot-<BLOCK HEIGHT>-<HASH>`.
+/// Where `BLOCK HEIGHT` is the height at which the snapshot
+/// was produced and `HASH` is the hash.
 pub async fn process_snapshot(
     reqwest_client: &reqwest::Client,
     snapshot_url: &str,
@@ -43,7 +45,12 @@ pub async fn process_snapshot(
 /// * `Ok(None)` - If no snapshot file is found
 /// * `Err(io::Error)` - If there's an error accessing the directory.
 /// 
-/// TODO: Implement better verification for the snapshot file, maybe a RE.
+/// TODO
+/// * Implement freshness logic for the snapshot cache i.e., use the
+/// latest snapshot in the cache and disregard snapshots that are too
+/// old during the check process.
+/// * Implement better verification for the snapshot file. Can verify
+/// if it's actually a valid snapshot.
 fn get_snapshot_from_cache(snapshot_dir: &Path) -> io::Result<Option<PathBuf>> {
     // Check if directory exists
     if !snapshot_dir.exists() {
@@ -90,6 +97,11 @@ pub (super) mod download {
     /// Asynchronously streams a snapshot from the provided `url`
     /// to a file in the `snapshot_dir`, updating a CLI progress
     /// bar as it does.
+    /// 
+    /// The file only persists if the download is successful.
+    /// 
+    /// The snapshot_dir and all parent dirs will be automatically
+    /// created if they do not already exist.
     pub (super) async fn download_snapshot(
         snapshot_dir: impl AsRef<Path>,
         reqwest_client: &reqwest::Client,
@@ -116,6 +128,7 @@ pub (super) mod download {
         // Final snapshot path.
         let file_path = snapshot_dir.as_ref().join(file_name);
 
+        // Create a progress bar.
         let total_size = response.content_length().unwrap_or(0);
         let progress_bar = ProgressBar::new(total_size);
         progress_bar.set_style(ProgressStyle::default_bar()
@@ -127,19 +140,21 @@ pub (super) mod download {
 
         // Download to a temp file first.
         let temp_file = tempfile::NamedTempFile::new_in(snapshot_dir.as_ref())?;
-        // Create scope to ensure writer is dropped before persisting.
+
+        // Create sub-scope to ensure writer is dropped before persisting file.
         {
             let mut writer = BufWriter::new(&temp_file);
-
+            // Stream response in chunks.
             while let Some(chunk) = response.chunk().await? {
                 writer.write_all(&chunk)?;
                 progress_bar.inc(chunk.len() as u64);
             }
-
             writer.flush()?;
         }
+
         temp_file.persist(&file_path)?;
         progress_bar.finish_with_message("Download completed");
+        info!("File downloaded successfully.");
         Ok(file_path)
     }
 

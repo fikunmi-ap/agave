@@ -52,6 +52,16 @@ use {
 };
 
 #[tokio::main]
+/// Benchmark banking stage with real world transactions starting
+/// unpack starting state from a full snapshot.
+/// 
+/// # How it works
+/// - Fetch snapshot metadata,
+/// - Download blocks,
+/// - Replay txs.
+///
+/// TODO: Add logic that determines if it makes sense to replay now
+/// based on the number of blocks specified.
 async fn main() -> Result<()> {
     solana_logger::setup();
     let args = CliArgs::parse();
@@ -67,13 +77,6 @@ async fn main() -> Result<()> {
 
     let rpc_client = RpcClient::new(rpc_url.to_string());
     let reqwest_client = reqwest::Client::new();
-
-    // Setup
-    // - Fetch snapshot metadata,
-    // - Download blocks,
-    // - Create bank.
-    // TODO: Add logic that determines if it makes sense to replay now
-    // based on the number of blocks specified.
 
     let snapshot_dir = working_dir.join("snapshots");
     
@@ -135,8 +138,9 @@ async fn main() -> Result<()> {
     let blockstore =
         Arc::new(Blockstore::open(ledger_path.path()).expect("Failed to get database ledger"));
 
+    // Needed for a leader schedule that aligns with our requirements
+    // TODO: Verify it's necessity.
     let bank_for_benches = Bank::new_for_benches(&genesis_config);
-
     let leader_schedule_cache = Arc::new(LeaderScheduleCache::new_from_bank(&bank_for_benches));
 
     let (exit, poh_recorder, transaction_recorder, poh_service, signal_receiver) =
@@ -198,7 +202,7 @@ async fn main() -> Result<()> {
 
     let transactions = transactions::download_decode_and_filter_blocks(
         &rpc_client,
-        snapshot_slot,
+        snapshot_slot + 1, //block right after snapshot
         args.num_blocks,
     )
     .await?;

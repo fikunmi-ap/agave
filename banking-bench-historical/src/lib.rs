@@ -29,8 +29,7 @@ impl Network {
             Self::EclipseTestnet => "https://testnet.dev2.eclipsenetwork.xyz/",
             Self::EclipseMainnet => "https://mainnetbeta-rpc.eclipse.xyz/",
             Self::SolanaTestnet => "https://api.testnet.solana.com",
-            Self::SolanaMainnet => "https://api.mainnet-beta.solana.com",
-            
+            Self::SolanaMainnet => "https://api.mainnet-beta.solana.com",   
         }
     }
 

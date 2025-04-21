@@ -15,17 +15,22 @@ use {
     },
     solana_program::instruction::CompiledInstruction,
     solana_pubkey::Pubkey,
-    solana_sdk::vote,
     solana_signature::Signature,
     solana_transaction::versioned::VersionedTransaction,
     solana_transaction_status_client_types::{EncodedTransaction, UiConfirmedBlock, UiMessage},
     std::str::FromStr,
 };
 
-const VOTE_PROGRAM: Pubkey = vote::program::ID;
+/// Vote Program ID.
+const VOTE_PROGRAM_ID: Pubkey = solana_vote_program::id();
 
-/// Downloads and decodes blocks then filters out vote transactions.
-/// Returns a single `Vec` of transactions.
+/// Number of blocks to be downloaded concurrently.
+const NUM_CONCURRENT_BLOCKS: usize = 10;
+
+/// Downloads and decodes `num_blocks` blocks then filters
+/// out vote transactions.
+/// 
+/// Returns a single `Vec` of `VersionedTransaction`.
 pub async fn download_decode_and_filter_blocks(
     rpc_client: &RpcClient,
     slot: u64,
@@ -45,13 +50,13 @@ pub async fn download_decode_and_filter_blocks(
 
 /// Downloads the first n blocks from slot `slot` concurrently.
 ///
-/// Intended to be used on mainnet-beta.
+/// Handles the bug that comes with versioned transactions being
+/// used on mainnet.
 async fn download_blocks(
     rpc_client: &RpcClient,
     slot: u64,
     num_blocks: u64,
 ) -> Result<Vec<UiConfirmedBlock>, ClientError> {
-    const NUM_CONCURRENT_BLOCKS: usize = 10;
 
     stream::iter(slot..(slot + num_blocks))
         .map(|slot| async move { download_block(rpc_client, slot).await })
@@ -62,9 +67,11 @@ async fn download_blocks(
         .collect()
 }
 
-/// Decodes a block of transactions fetched from Solana mainnet-beta.
-///
-/// Uses `decode`.
+/// Decodes a block of transactions, i.e., it transforms a
+/// `UiConfirmedBlock` to a `Vec<VersionedTransaction>`.
+/// 
+/// Can successfully decode Mainnetbeta transactions by calling
+/// `decode` implemented below.
 fn decode_block(encoded_block: &UiConfirmedBlock) -> Result<Vec<VersionedTransaction>> {
     if let Some(encoded_transactions) = &encoded_block.transactions {
         encoded_transactions
@@ -76,21 +83,22 @@ fn decode_block(encoded_block: &UiConfirmedBlock) -> Result<Vec<VersionedTransac
     }
 }
 
-/// Removes voting transactions and returns a clean list of non-voting
-/// transactions.
+/// Removes voting transactions from a `Vec` of `VersionedTransactions`
+/// and returns a `Vec` of non-voting transactions.
 ///
 /// Can be used even on transactions with lookups by taking advantage
 /// of the constraint that program addresses must be statically defined.
 fn filter_votes(transactions: Vec<VersionedTransaction>) -> Vec<VersionedTransaction> {
     transactions
         .into_iter()
-        .filter(|tx| !tx.message.static_account_keys().contains(&VOTE_PROGRAM))
+        .filter(|tx| !tx.message.static_account_keys().contains(&VOTE_PROGRAM_ID))
         .collect()
 }
 
-/// Downloads the block at `slot`.
-///
-/// Intended to be used on mainnet-beta.
+/// Downloads the block at height `slot`.
+/// 
+/// Can be used reliably on mainnet because it supports
+/// versioned transactions.
 async fn download_block(
     rpc_client: &RpcClient,
     slot: u64,
@@ -222,7 +230,7 @@ mod tests {
 
         let decoded_transactions: Vec<_> = encoded_block
             .transactions
-            .expect("Block does not contain transactions")
+            .expect("Recently confirmed block does not contain transactions")
             .iter()
             .map(|e_tx| decode(&e_tx.transaction))
             .collect();
@@ -237,7 +245,7 @@ mod tests {
     async fn test_filter_votes() {
         let transactions = vec![VersionedTransaction {
             message: VersionedMessage::V0(v0::Message {
-                account_keys: vec![vote::program::ID],
+                account_keys: vec![VOTE_PROGRAM_ID],
                 ..v0::Message::default()
             }),
             ..VersionedTransaction::default()
