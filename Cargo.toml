@@ -373,7 +373,7 @@ solana-blake3-hasher = "=2.2.1"
 solana-bloom = { path = "bloom", version = "=2.2.4" }
 solana-bn254 = "=2.2.1"
 solana-borsh = "=2.2.1"
-solana-bpf-loader-program = { path = "programs/bpf_loader", version = "=2.2.4" }
+solana-bpf-loader-program = {path = "programs/bpf_loader" }
 solana-bucket-map = { path = "bucket_map", version = "=2.2.4" }
 solana-builtins = { path = "builtins", version = "=2.2.4" }
 solana-builtins-default-costs = { path = "builtins-default-costs", version = "=2.2.4" }
@@ -509,7 +509,7 @@ solana-rpc-client-api = { path = "rpc-client-api", version = "=2.2.4" }
 solana-rpc-client-nonce-utils = { path = "rpc-client-nonce-utils", version = "=2.2.4" }
 solana-runtime = { path = "runtime", version = "=2.2.4" }
 solana-runtime-transaction = { path = "runtime-transaction", version = "=2.2.4" }
-solana-sbpf = "=0.10.0"
+solana-sbpf = { path = "solana-sbpf" }
 solana-sdk = "=2.2.1"
 solana-sdk-ids = "=2.2.1"
 solana-sdk-macro = "=2.2.1"

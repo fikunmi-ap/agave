@@ -12,7 +12,7 @@ use {
     solana_clock::Slot,
     solana_compute_budget::compute_budget::MAX_INSTRUCTION_STACK_DEPTH,
     solana_feature_set::{
-        bpf_account_data_direct_mapping, disable_new_loader_v3_deployments,
+        disable_new_loader_v3_deployments,
         enable_bpf_loader_set_authority_checked_ix, enable_loader_v4,
         remove_accounts_executable_flag_checks,
     },
@@ -1580,9 +1580,9 @@ fn execute<'a, 'b: 'a>(
     let use_jit = false;
     #[cfg(all(not(target_os = "windows"), target_arch = "x86_64"))]
     let use_jit = executable.get_compiled_program().is_some();
-    let direct_mapping = invoke_context
-        .get_feature_set()
-        .is_active(&bpf_account_data_direct_mapping::id());
+
+    // must disable direct mapping as the JIT depends on host contiguous regions
+    let direct_mapping = false;
 
     let mut serialize_time = Measure::start("serialize");
     let (parameter_bytes, regions, accounts_metadata) = serialization::serialize_parameters(

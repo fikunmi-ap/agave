@@ -373,7 +373,7 @@ pub fn create_program_runtime_environment_v1<'a>(
     let config = Config {
         max_call_depth: compute_budget.max_call_depth,
         stack_frame_size: compute_budget.stack_frame_size,
-        enable_address_translation: true,
+        enable_address_translation: false,
         enable_stack_frame_gaps: !feature_set.is_active(&bpf_account_data_direct_mapping::id()),
         instruction_meter_checkpoint_distance: 10000,
         enable_instruction_meter: true,
@@ -574,7 +574,7 @@ pub fn create_program_runtime_environment_v2<'a>(
     let config = Config {
         max_call_depth: compute_budget.max_call_depth,
         stack_frame_size: compute_budget.stack_frame_size,
-        enable_address_translation: true, // To be deactivated once we have BTF inference and verification
+        enable_address_translation: false, // To be deactivated once we have BTF inference and verification
         enable_stack_frame_gaps: false,
         instruction_meter_checkpoint_distance: 10000,
         enable_instruction_meter: true,
